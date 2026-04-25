@@ -19,7 +19,8 @@
     {
       "matches": ["<all_urls>"],
       "js": ["c.js"],
-      "css": ["s.css"]
+      "css": ["s.css"],
+      "all_frames": true
     }
   ]
 }
