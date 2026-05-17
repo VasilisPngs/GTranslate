@@ -1,35 +1,40 @@
 let activeController = null;
 
-chrome.runtime.onMessage.addListener((req, sender, res) => {
-  if (!req.t) return false;
+chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
+  if (!req || typeof req.t !== 'string' || !req.t) {
+    sendResponse({ r: null });
+    return false;
+  }
 
   if (activeController) activeController.abort();
-  activeController = new AbortController();
-  const { signal } = activeController;
+  const controller = new AbortController();
+  activeController = controller;
 
-  const timeoutId = setTimeout(() => {
-    if (activeController) activeController.abort();
-  }, 8000);
+  const timeoutId = setTimeout(() => controller.abort(), 8000);
 
   const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=el&dt=t&q=${encodeURIComponent(req.t)}`;
 
-  fetch(url, { signal })
-    .then(r => r.json())
+  fetch(url, { signal: controller.signal })
+    .then(r => r.ok ? r.json() : null)
     .then(data => {
       clearTimeout(timeoutId);
-      if (data?.[2] === 'el') return res({ r: null });
+
+      if (!data || data?.[2] === 'el') {
+        sendResponse({ r: null });
+        return;
+      }
 
       let out = '';
-      if (data?.[0]) {
-        for (let i = 0; i < data[0].length; i++) {
-          out += data[0][i]?.[0] || '';
-        }
+      const chunks = data[0];
+      if (Array.isArray(chunks)) {
+        for (const c of chunks) out += c?.[0] || '';
       }
-      res({ r: out });
+      out = out.trim();
+      sendResponse({ r: out || null });
     })
-    .catch(err => {
+    .catch(() => {
       clearTimeout(timeoutId);
-      if (err.name !== 'AbortError') res({ r: null });
+      sendResponse({ r: null });
     });
 
   return true;
