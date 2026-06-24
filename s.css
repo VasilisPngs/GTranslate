@@ -1,0 +1,62 @@
+#gtranslate-popup {
+  all: initial;
+  position: fixed;
+  inset: 0;
+  z-index: 2147483646;
+  pointer-events: none;
+  color-scheme: light dark;
+}
+
+#gtranslate-popup .gtranslate-panel {
+  all: initial;
+  position: fixed;
+  box-sizing: border-box;
+  display: block;
+  width: max-content;
+  max-width: min(300px, calc(100vw - 16px));
+  overflow: hidden;
+  color: CanvasText;
+  background: Canvas;
+  border: 1px solid ButtonBorder;
+  opacity: 0;
+  pointer-events: none;
+  font: menu;
+}
+
+#gtranslate-popup .gtranslate-panel.is-show {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+#gtranslate-popup .gtranslate-result-wrapper {
+  all: initial;
+  display: block;
+  box-sizing: border-box;
+  max-height: min(200px, calc(100vh - 16px));
+  overflow: auto;
+  font: inherit;
+}
+
+#gtranslate-popup .gtranslate-result-content {
+  all: initial;
+  display: block;
+  box-sizing: border-box;
+  padding: 0.75em 1em;
+  color: CanvasText;
+  font: inherit;
+}
+
+#gtranslate-popup .gtranslate-result {
+  all: initial;
+  display: block;
+  margin: 0;
+  color: inherit;
+  font: inherit;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+#gtranslate-popup .gtranslate-result::selection {
+  color: HighlightText;
+  background: Highlight;
+}
