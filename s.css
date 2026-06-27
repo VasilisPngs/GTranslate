@@ -20,7 +20,7 @@
   border: 1px solid ButtonBorder;
   opacity: 0;
   pointer-events: none;
-  font: menu;
+  font: message-box;
 }
 
 #gtranslate-popup .gtranslate-panel.is-show {

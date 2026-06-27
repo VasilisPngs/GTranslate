@@ -71,7 +71,7 @@ const getSelectedText = () => {
   return window.getSelection()?.toString() ?? '';
 };
 
-const getSelectedPosition = (fallback) => {
+const getSelectionAnchor = (fallback) => {
   const selection = window.getSelection();
 
   if (!selection || selection.rangeCount === 0) return fallback;
@@ -82,7 +82,8 @@ const getSelectedPosition = (fallback) => {
 
   return {
     x: rect.left + rect.width / 2,
-    y: rect.bottom
+    top: rect.top,
+    bottom: rect.bottom
   };
 };
 
@@ -100,15 +101,18 @@ const translateText = async (text) => {
   }
 };
 
-const getPopupPosition = (width, height, referencePosition) => {
+const getPopupPosition = (width, height, anchor) => {
   const viewportWidth = document.documentElement.clientWidth;
   const viewportHeight = document.documentElement.clientHeight;
   const maxX = Math.max(POPUP_OFFSET, viewportWidth - width - POPUP_OFFSET);
   const maxY = Math.max(POPUP_OFFSET, viewportHeight - height - POPUP_OFFSET);
+  const fitsBelow = anchor.bottom + POPUP_OFFSET + height <= viewportHeight - POPUP_OFFSET;
+  const fitsAbove = anchor.top - POPUP_OFFSET - height >= POPUP_OFFSET;
+  const y = fitsBelow || !fitsAbove ? anchor.bottom + POPUP_OFFSET : anchor.top - POPUP_OFFSET - height;
 
   return {
-    x: Math.min(Math.max(referencePosition.x - width / 2, POPUP_OFFSET), maxX),
-    y: Math.min(Math.max(referencePosition.y + POPUP_OFFSET, POPUP_OFFSET), maxY)
+    x: Math.min(Math.max(anchor.x - width / 2, POPUP_OFFSET), maxX),
+    y: Math.min(Math.max(y, POPUP_OFFSET), maxY)
   };
 };
 
@@ -139,14 +143,14 @@ const createPopup = (resultText) => {
   return panel;
 };
 
-const showPopup = async (sourceText, referencePosition, requestId) => {
+const showPopup = async (sourceText, anchor, requestId) => {
   const resultText = await translateText(sourceText);
 
   if (requestId !== activeRequestId || !resultText || !document.body) return;
 
   const panel = createPopup(resultText);
   const rect = panel.getBoundingClientRect();
-  const position = getPopupPosition(rect.width, rect.height, referencePosition);
+  const position = getPopupPosition(rect.width, rect.height, anchor);
 
   panel.style.left = `${position.x}px`;
   panel.style.top = `${position.y}px`;
@@ -173,12 +177,13 @@ const handleMouseUp = async (event) => {
 
   if (shouldSkipSelection(selectedText) || isBlockedSelectionTarget(target)) return;
 
-  const referencePosition = getSelectedPosition({
+  const anchor = getSelectionAnchor({
     x: event.clientX,
-    y: event.clientY
+    top: event.clientY,
+    bottom: event.clientY
   });
 
-  showPopup(selectedText, referencePosition, requestId);
+  showPopup(selectedText, anchor, requestId);
 };
 
 const handleKeyDown = (event) => {
