@@ -21,6 +21,7 @@
   opacity: 0;
   pointer-events: none;
   font: message-box;
+  font-size: 14px;
 }
 
 #gtranslate-popup .gtranslate-panel.is-show {
@@ -31,7 +32,6 @@
 #gtranslate-popup .gtranslate-result-wrapper {
   all: initial;
   display: block;
-  box-sizing: border-box;
   max-height: min(200px, calc(100vh - 16px));
   overflow: auto;
   font: inherit;
@@ -40,8 +40,7 @@
 #gtranslate-popup .gtranslate-result-content {
   all: initial;
   display: block;
-  box-sizing: border-box;
-  padding: 0.75em 1em;
+  padding: 4px 7px;
   color: CanvasText;
   font: inherit;
 }
@@ -49,11 +48,9 @@
 #gtranslate-popup .gtranslate-result {
   all: initial;
   display: block;
-  margin: 0;
   color: inherit;
   font: inherit;
   overflow-wrap: anywhere;
-  word-break: normal;
 }
 
 #gtranslate-popup .gtranslate-result::selection {
