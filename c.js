@@ -18,6 +18,8 @@ const SKIPPED_COMPACT_TEXT_PATTERN = /^[A-Z0-9._:/#-]+$/;
 
 let activeRequestId = 0;
 
+const delay = (duration) => new Promise((resolve) => setTimeout(resolve, duration));
+
 const isPasswordInput = (element) => element instanceof HTMLInputElement && element.type === 'password';
 
 const getElementFromNode = (node) => {
@@ -70,10 +72,6 @@ const getSelectedText = () => {
 };
 
 const getSelectionAnchor = (fallback) => {
-  const element = document.activeElement;
-
-  if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) return fallback;
-
   const selection = window.getSelection();
 
   if (!selection || selection.rangeCount === 0) return fallback;
@@ -103,36 +101,18 @@ const translateText = async (text) => {
   }
 };
 
-const getPopupPlacement = (height, anchor) => {
-  const viewportHeight = document.documentElement.clientHeight;
-  const spaceBelow = Math.max(0, viewportHeight - anchor.bottom - POPUP_OFFSET * 2);
-  const spaceAbove = Math.max(0, anchor.top - POPUP_OFFSET * 2);
-  const below = height <= spaceBelow || (height > spaceAbove && spaceBelow >= spaceAbove);
-
-  return {
-    below,
-    availableHeight: below ? spaceBelow : spaceAbove
-  };
-};
-
-const getPopupX = (width, anchorX) => {
+const getPopupPosition = (width, height, anchor) => {
   const viewportWidth = document.documentElement.clientWidth;
+  const viewportHeight = document.documentElement.clientHeight;
   const maxX = Math.max(POPUP_OFFSET, viewportWidth - width - POPUP_OFFSET);
-
-  return Math.min(Math.max(anchorX - width / 2, POPUP_OFFSET), maxX);
-};
-
-const getPointerAnchor = (event, target) => {
-  const element = getElementFromNode(target);
-  const style = element ? getComputedStyle(element) : null;
-  const fontSize = Number.parseFloat(style?.fontSize) || 16;
-  const lineHeight = Number.parseFloat(style?.lineHeight) || fontSize * 1.2;
-  const halfLineHeight = lineHeight / 2;
+  const maxY = Math.max(POPUP_OFFSET, viewportHeight - height - POPUP_OFFSET);
+  const fitsBelow = anchor.bottom + POPUP_OFFSET + height <= viewportHeight - POPUP_OFFSET;
+  const fitsAbove = anchor.top - POPUP_OFFSET - height >= POPUP_OFFSET;
+  const y = fitsBelow || !fitsAbove ? anchor.bottom + POPUP_OFFSET : anchor.top - POPUP_OFFSET - height;
 
   return {
-    x: event.clientX,
-    top: event.clientY - halfLineHeight,
-    bottom: event.clientY + halfLineHeight
+    x: Math.min(Math.max(anchor.x - width / 2, POPUP_OFFSET), maxX),
+    y: Math.min(Math.max(y, POPUP_OFFSET), maxY)
   };
 };
 
@@ -166,32 +146,18 @@ const createPopup = (resultText) => {
 const showPopup = async (sourceText, anchor, requestId) => {
   const resultText = await translateText(sourceText);
 
-  if (
-    requestId !== activeRequestId ||
-    !resultText ||
-    !document.body ||
-    getSelectedText().trim() !== sourceText.trim()
-  ) return;
+  if (requestId !== activeRequestId || !resultText || !document.body) return;
 
   const panel = createPopup(resultText);
-  const wrapper = panel.querySelector('.gtranslate-result-wrapper');
-  let rect = panel.getBoundingClientRect();
-  const placement = getPopupPlacement(rect.height, anchor);
+  const rect = panel.getBoundingClientRect();
+  const position = getPopupPosition(rect.width, rect.height, anchor);
 
-  if (rect.height > placement.availableHeight && wrapper instanceof HTMLElement) {
-    const wrapperHeight = wrapper.getBoundingClientRect().height;
-    const panelChromeHeight = rect.height - wrapperHeight;
-
-    wrapper.style.maxHeight = `${Math.max(0, placement.availableHeight - panelChromeHeight)}px`;
-    rect = panel.getBoundingClientRect();
-  }
-
-  panel.style.left = `${getPopupX(rect.width, anchor.x)}px`;
-  panel.style.top = `${placement.below ? anchor.bottom + POPUP_OFFSET : anchor.top - POPUP_OFFSET - rect.height}px`;
+  panel.style.left = `${position.x}px`;
+  panel.style.top = `${position.y}px`;
   panel.classList.add('is-show');
 };
 
-const handleMouseUp = (event) => {
+const handleMouseUp = async (event) => {
   if (event.button !== 0) return;
 
   const target = event.target;
@@ -205,20 +171,19 @@ const handleMouseUp = (event) => {
 
   if (isPasswordInput(target) || isPasswordInput(document.activeElement)) return;
 
+  await delay(10);
+
   const selectedText = getSelectedText();
 
   if (shouldSkipSelection(selectedText) || isBlockedSelectionTarget(target)) return;
 
-  const anchor = getSelectionAnchor(getPointerAnchor(event, target));
+  const anchor = getSelectionAnchor({
+    x: event.clientX,
+    top: event.clientY,
+    bottom: event.clientY
+  });
 
   showPopup(selectedText, anchor, requestId);
-};
-
-const handleSelectionChange = () => {
-  if (getSelectedText().trim()) return;
-
-  ++activeRequestId;
-  removePopup();
 };
 
 const handleKeyDown = (event) => {
@@ -229,5 +194,4 @@ const handleKeyDown = (event) => {
 };
 
 document.addEventListener('mouseup', handleMouseUp);
-document.addEventListener('selectionchange', handleSelectionChange, true);
 document.addEventListener('keydown', handleKeyDown);
