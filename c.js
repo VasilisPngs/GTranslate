@@ -17,6 +17,7 @@ const SKIPPED_TEXT_PATTERNS = [
 const SKIPPED_COMPACT_TEXT_PATTERN = /^[A-Z0-9._:/#-]+$/;
 
 let activeRequestId = 0;
+let activeSourceText = '';
 
 const delay = (duration) => new Promise((resolve) => setTimeout(resolve, duration));
 
@@ -71,14 +72,32 @@ const getSelectedText = () => {
   return window.getSelection()?.toString() ?? '';
 };
 
-const getSelectionAnchor = (fallback) => {
+const getPointerAnchor = (event, target) => {
+  const element = getElementFromNode(target);
+  const style = element ? getComputedStyle(element) : null;
+  const fontSize = Number.parseFloat(style?.fontSize) || 16;
+  const lineHeight = Number.parseFloat(style?.lineHeight) || fontSize * 1.2;
+  const halfLineHeight = lineHeight / 2;
+
+  return {
+    x: event.clientX,
+    top: event.clientY - halfLineHeight,
+    bottom: event.clientY + halfLineHeight
+  };
+};
+
+const getSelectionAnchor = (event, target) => {
+  const element = document.activeElement;
+
+  if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) return getPointerAnchor(event, target);
+
   const selection = window.getSelection();
 
-  if (!selection || selection.rangeCount === 0) return fallback;
+  if (!selection || selection.rangeCount === 0) return getPointerAnchor(event, target);
 
   const rect = selection.getRangeAt(0).getBoundingClientRect();
 
-  if (rect.width === 0 && rect.height === 0) return fallback;
+  if (rect.width === 0 && rect.height === 0) return getPointerAnchor(event, target);
 
   return {
     x: rect.left + rect.width / 2,
@@ -87,8 +106,26 @@ const getSelectionAnchor = (fallback) => {
   };
 };
 
+const isSelectionInsidePopup = () => {
+  const container = document.getElementById(CONTAINER_ID);
+
+  if (!container) return false;
+
+  const selection = window.getSelection();
+
+  if (!selection || selection.rangeCount === 0) return false;
+
+  return container.contains(selection.getRangeAt(0).commonAncestorContainer);
+};
+
 const removePopup = () => {
+  activeSourceText = '';
   document.getElementById(CONTAINER_ID)?.remove();
+};
+
+const dismissPopup = () => {
+  ++activeRequestId;
+  removePopup();
 };
 
 const translateText = async (text) => {
@@ -101,19 +138,23 @@ const translateText = async (text) => {
   }
 };
 
-const getPopupPosition = (width, height, anchor) => {
-  const viewportWidth = document.documentElement.clientWidth;
+const getPopupPlacement = (height, anchor) => {
   const viewportHeight = document.documentElement.clientHeight;
-  const maxX = Math.max(POPUP_OFFSET, viewportWidth - width - POPUP_OFFSET);
-  const maxY = Math.max(POPUP_OFFSET, viewportHeight - height - POPUP_OFFSET);
-  const fitsBelow = anchor.bottom + POPUP_OFFSET + height <= viewportHeight - POPUP_OFFSET;
-  const fitsAbove = anchor.top - POPUP_OFFSET - height >= POPUP_OFFSET;
-  const y = fitsBelow || !fitsAbove ? anchor.bottom + POPUP_OFFSET : anchor.top - POPUP_OFFSET - height;
+  const spaceBelow = Math.max(0, viewportHeight - anchor.bottom - POPUP_OFFSET * 2);
+  const spaceAbove = Math.max(0, anchor.top - POPUP_OFFSET * 2);
+  const below = height <= spaceBelow || (height > spaceAbove && spaceBelow >= spaceAbove);
 
   return {
-    x: Math.min(Math.max(anchor.x - width / 2, POPUP_OFFSET), maxX),
-    y: Math.min(Math.max(y, POPUP_OFFSET), maxY)
+    below,
+    availableHeight: below ? spaceBelow : spaceAbove
   };
+};
+
+const getPopupX = (width, anchorX) => {
+  const viewportWidth = document.documentElement.clientWidth;
+  const maxX = Math.max(POPUP_OFFSET, viewportWidth - width - POPUP_OFFSET);
+
+  return Math.min(Math.max(anchorX - width / 2, POPUP_OFFSET), maxX);
 };
 
 const createPopup = (resultText) => {
@@ -140,21 +181,33 @@ const createPopup = (resultText) => {
   container.appendChild(panel);
   document.body.appendChild(container);
 
-  return panel;
+  return { panel, wrapper };
 };
 
 const showPopup = async (sourceText, anchor, requestId) => {
   const resultText = await translateText(sourceText);
 
-  if (requestId !== activeRequestId || !resultText || !document.body) return;
+  if (
+    requestId !== activeRequestId ||
+    !resultText ||
+    !document.body ||
+    getSelectedText().trim() !== sourceText.trim()
+  ) return;
 
-  const panel = createPopup(resultText);
-  const rect = panel.getBoundingClientRect();
-  const position = getPopupPosition(rect.width, rect.height, anchor);
+  const { panel, wrapper } = createPopup(resultText);
+  let rect = panel.getBoundingClientRect();
+  const placement = getPopupPlacement(rect.height, anchor);
 
-  panel.style.left = `${position.x}px`;
-  panel.style.top = `${position.y}px`;
-  panel.classList.add('is-show');
+  if (rect.height > placement.availableHeight) {
+    const panelChromeHeight = rect.height - wrapper.getBoundingClientRect().height;
+
+    wrapper.style.maxHeight = `${Math.max(0, placement.availableHeight - panelChromeHeight)}px`;
+    rect = panel.getBoundingClientRect();
+  }
+
+  panel.style.left = `${getPopupX(rect.width, anchor.x)}px`;
+  panel.style.top = `${placement.below ? anchor.bottom + POPUP_OFFSET : anchor.top - POPUP_OFFSET - rect.height}px`;
+  activeSourceText = sourceText.trim();
 };
 
 const handleMouseUp = async (event) => {
@@ -165,6 +218,7 @@ const handleMouseUp = async (event) => {
 
   if (existing && target instanceof Node && existing.contains(target)) return;
 
+  const displayedText = activeSourceText;
   const requestId = ++activeRequestId;
 
   removePopup();
@@ -175,23 +229,30 @@ const handleMouseUp = async (event) => {
 
   const selectedText = getSelectedText();
 
+  if (selectedText.trim() === displayedText) return;
+
   if (shouldSkipSelection(selectedText) || isBlockedSelectionTarget(target)) return;
 
-  const anchor = getSelectionAnchor({
-    x: event.clientX,
-    top: event.clientY,
-    bottom: event.clientY
-  });
+  const anchor = getSelectionAnchor(event, target);
 
   showPopup(selectedText, anchor, requestId);
+};
+
+const handleSelectionChange = () => {
+  if (isSelectionInsidePopup()) return;
+
+  if (getSelectedText().trim() === activeSourceText) return;
+
+  dismissPopup();
 };
 
 const handleKeyDown = (event) => {
   if (event.key !== 'Escape') return;
 
-  ++activeRequestId;
-  removePopup();
+  dismissPopup();
 };
 
 document.addEventListener('mouseup', handleMouseUp);
+document.addEventListener('selectionchange', handleSelectionChange);
 document.addEventListener('keydown', handleKeyDown);
+window.addEventListener('blur', dismissPopup);
