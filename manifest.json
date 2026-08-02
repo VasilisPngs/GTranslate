@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "GTranslate",
-  "version": "1.1.0",
+  "version": "1.0.0",
   "description": "Shows a Greek translation of the selected text in a popup next to the selection.",
   "minimum_chrome_version": "116",
   "icons": {
