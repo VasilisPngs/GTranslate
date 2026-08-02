@@ -1,16 +1,40 @@
 const TRANSLATE_URL = 'https://translate.googleapis.com/translate_a/single';
 const TARGET_LANG = 'el';
 const TIMEOUT_MS = 8000;
+const CACHE_LIMIT = 100;
 const SEPARATOR_SPLIT_PATTERN = /([-_/–—]+)/;
 const LETTER_PATTERN = /\p{L}/u;
 
 const activeControllers = new Map();
+const translationCache = new Map();
 
-const normalizeText = (value) => String(value ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+const collapseWhitespace = (value) => value.replace(/\s+/g, ' ').trim();
 
-const getRequestKey = (sender) => `${sender.tab?.id ?? 'unknown'}:${sender.frameId ?? 0}`;
+const normalizeText = (value) => collapseWhitespace(value).toLowerCase();
+
+const getRequestKey = (sender) => `${sender.tab?.id}:${sender.frameId}`;
 
 const isDistinct = (resultText, sourceText) => Boolean(resultText) && normalizeText(resultText) !== normalizeText(sourceText);
+
+const readCache = (key) => {
+  if (!translationCache.has(key)) return undefined;
+
+  const value = translationCache.get(key);
+
+  translationCache.delete(key);
+  translationCache.set(key, value);
+
+  return value;
+};
+
+const writeCache = (key, value) => {
+  translationCache.delete(key);
+  translationCache.set(key, value);
+
+  if (translationCache.size > CACHE_LIMIT) {
+    translationCache.delete(translationCache.keys().next().value);
+  }
+};
 
 const fetchTranslation = async (sourceText, signal) => {
   const params = new URLSearchParams({
@@ -34,10 +58,10 @@ const fetchTranslation = async (sourceText, signal) => {
   return resultText || null;
 };
 
-const restoreSeparators = (segments, terms, translatedText) => {
+const restoreSeparators = (segments, translatedText) => {
   const words = translatedText.split(/\s+/);
 
-  if (words.length !== terms.length) return translatedText;
+  if (words.length !== Math.ceil(segments.length / 2)) return translatedText;
 
   return segments.map((segment, index) => (index % 2 === 0 ? words[index / 2] : segment)).join('');
 };
@@ -58,7 +82,7 @@ const translateSeparated = async (sourceText, signal) => {
 
   if (!isDistinct(translatedText, spacedText)) return null;
 
-  return restoreSeparators(segments, terms, translatedText);
+  return restoreSeparators(segments, translatedText);
 };
 
 const translate = async (sourceText, signal) => {
@@ -70,10 +94,17 @@ const translate = async (sourceText, signal) => {
 };
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  const sourceText = typeof request?.text === 'string' ? request.text.trim() : '';
+  const sourceText = typeof request?.text === 'string' ? collapseWhitespace(request.text) : '';
 
   if (!sourceText) {
     sendResponse({ result: null });
+    return false;
+  }
+
+  const cached = readCache(sourceText);
+
+  if (cached !== undefined) {
+    sendResponse({ result: cached });
     return false;
   }
 
@@ -82,6 +113,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   activeControllers.get(requestKey)?.abort();
 
   const controller = new AbortController();
+
   activeControllers.set(requestKey, controller);
 
   (async () => {
@@ -89,6 +121,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(TIMEOUT_MS)]);
       const result = await translate(sourceText, signal);
 
+      writeCache(sourceText, result);
       sendResponse({ result });
     } catch {
       sendResponse({ result: null });

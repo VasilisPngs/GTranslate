@@ -1,7 +1,10 @@
 const POPUP_OFFSET = 8;
+const POPUP_MAX_WIDTH = 300;
+const POPUP_MAX_HEIGHT = 200;
 const MIN_SELECTION_LENGTH = 3;
-const CONTAINER_ID = 'gtranslate-popup';
+const MAX_SELECTION_LENGTH = 1000;
 const SKIPPED_SELECTION_SELECTOR = 'code, pre, kbd, samp';
+const SCROLL_LISTENER_OPTIONS = { capture: true, passive: true };
 
 const SKIPPED_TEXT_PATTERNS = [
   /^https?:\/\//i,
@@ -15,13 +18,51 @@ const SKIPPED_TEXT_PATTERNS = [
 ];
 
 const SKIPPED_COMPACT_TEXT_PATTERN = /^[A-Z0-9._:/#-]+$/;
+const DIGIT_PATTERN = /\d/;
 
+const POPUP_CSS = `
+:host {
+  all: initial;
+  position: fixed;
+  z-index: 2147483646;
+  color-scheme: light dark;
+  font: message-box;
+}
+
+.panel {
+  box-sizing: border-box;
+  max-width: min(${POPUP_MAX_WIDTH}px, calc(100vw - ${POPUP_OFFSET * 2}px));
+  max-height: min(${POPUP_MAX_HEIGHT}px, calc(100vh - ${POPUP_OFFSET * 2}px));
+  overflow: auto;
+  background: Canvas;
+  color: CanvasText;
+  border: 1px solid ButtonBorder;
+}
+
+.result {
+  margin: 0;
+  padding: 0.5em 0.75em;
+  font-size: 0.875em;
+  overflow-wrap: anywhere;
+}
+
+.result::selection {
+  color: HighlightText;
+  background: Highlight;
+}
+`;
+
+let popupStyleSheet = null;
+let popupHost = null;
+let sessionActive = false;
+let sessionSourceText = '';
 let activeRequestId = 0;
-let activeSourceText = '';
 
-const delay = (duration) => new Promise((resolve) => setTimeout(resolve, duration));
+const nextTask = () => new Promise((resolve) => {
+  setTimeout(resolve);
+});
 
-const isPasswordInput = (element) => element instanceof HTMLInputElement && element.type === 'password';
+const collapseWhitespace = (value) => value.replace(/\s+/g, ' ').trim();
 
 const getElementFromNode = (node) => {
   if (node instanceof Element) return node;
@@ -30,46 +71,52 @@ const getElementFromNode = (node) => {
   return null;
 };
 
-const isBlockedSelectionTarget = (target) => {
-  const targetElement = getElementFromNode(target);
+const getEditableElement = () => {
+  const element = document.activeElement;
 
-  if (targetElement?.closest(SKIPPED_SELECTION_SELECTOR)) return true;
-
-  const selection = window.getSelection();
-
-  if (!selection || selection.rangeCount === 0) return false;
-
-  const container = getElementFromNode(selection.getRangeAt(0).commonAncestorContainer);
-
-  return Boolean(container?.closest(SKIPPED_SELECTION_SELECTOR));
-};
-
-const shouldSkipSelection = (text) => {
-  const value = String(text ?? '').trim();
-
-  if (value.length < MIN_SELECTION_LENGTH) return true;
-
-  const compact = value.replace(/\s+/g, '');
-
-  if (SKIPPED_TEXT_PATTERNS.some((pattern) => pattern.test(value))) return true;
-
-  return SKIPPED_COMPACT_TEXT_PATTERN.test(compact) && /\d/.test(compact);
+  return element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement ? element : null;
 };
 
 const getSelectedText = () => {
-  const element = document.activeElement;
+  const editable = getEditableElement();
 
-  if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
-    if (isPasswordInput(element)) return '';
+  if (!editable) return collapseWhitespace(window.getSelection()?.toString() ?? '');
 
-    if (typeof element.selectionStart === 'number' && typeof element.selectionEnd === 'number') {
-      return element.value.slice(element.selectionStart, element.selectionEnd);
-    }
+  const { type, value, selectionStart, selectionEnd } = editable;
 
-    return '';
-  }
+  if (type === 'password' || typeof selectionStart !== 'number' || typeof selectionEnd !== 'number') return '';
 
-  return window.getSelection()?.toString() ?? '';
+  return collapseWhitespace(value.slice(selectionStart, selectionEnd));
+};
+
+const shouldSkipSelection = (value) => {
+  if (value.length < MIN_SELECTION_LENGTH || value.length > MAX_SELECTION_LENGTH) return true;
+
+  if (SKIPPED_TEXT_PATTERNS.some((pattern) => pattern.test(value))) return true;
+
+  const compact = value.replaceAll(' ', '');
+
+  return SKIPPED_COMPACT_TEXT_PATTERN.test(compact) && DIGIT_PATTERN.test(compact);
+};
+
+const isBlockedSelectionTarget = (target) => {
+  if (getElementFromNode(target)?.closest(SKIPPED_SELECTION_SELECTOR)) return true;
+
+  const selection = window.getSelection();
+
+  if (!selection?.rangeCount) return false;
+
+  return Boolean(getElementFromNode(selection.getRangeAt(0).commonAncestorContainer)?.closest(SKIPPED_SELECTION_SELECTOR));
+};
+
+const isSelectionInsidePopup = () => {
+  if (!popupHost) return false;
+
+  const node = window.getSelection()?.anchorNode;
+
+  if (!node) return false;
+
+  return popupHost.contains(node) || node.getRootNode() === popupHost.shadowRoot;
 };
 
 const getPointerAnchor = (event, target) => {
@@ -87,13 +134,11 @@ const getPointerAnchor = (event, target) => {
 };
 
 const getSelectionAnchor = (event, target) => {
-  const element = document.activeElement;
-
-  if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) return getPointerAnchor(event, target);
+  if (getEditableElement()) return getPointerAnchor(event, target);
 
   const selection = window.getSelection();
 
-  if (!selection || selection.rangeCount === 0) return getPointerAnchor(event, target);
+  if (!selection?.rangeCount) return getPointerAnchor(event, target);
 
   const rect = selection.getRangeAt(0).getBoundingClientRect();
 
@@ -104,38 +149,6 @@ const getSelectionAnchor = (event, target) => {
     top: rect.top,
     bottom: rect.bottom
   };
-};
-
-const isSelectionInsidePopup = () => {
-  const container = document.getElementById(CONTAINER_ID);
-
-  if (!container) return false;
-
-  const selection = window.getSelection();
-
-  if (!selection || selection.rangeCount === 0) return false;
-
-  return container.contains(selection.getRangeAt(0).commonAncestorContainer);
-};
-
-const removePopup = () => {
-  activeSourceText = '';
-  document.getElementById(CONTAINER_ID)?.remove();
-};
-
-const dismissPopup = () => {
-  ++activeRequestId;
-  removePopup();
-};
-
-const translateText = async (text) => {
-  try {
-    const response = await chrome.runtime.sendMessage({ text });
-
-    return response?.result || null;
-  } catch {
-    return null;
-  }
 };
 
 const getPopupPlacement = (height, anchor) => {
@@ -157,91 +170,48 @@ const getPopupX = (width, anchorX) => {
   return Math.min(Math.max(anchorX - width / 2, POPUP_OFFSET), maxX);
 };
 
+const getPopupStyleSheet = () => {
+  if (!popupStyleSheet) {
+    popupStyleSheet = new CSSStyleSheet();
+    popupStyleSheet.replaceSync(POPUP_CSS);
+  }
+
+  return popupStyleSheet;
+};
+
 const createPopup = (resultText) => {
-  const container = document.createElement('div');
-  container.id = CONTAINER_ID;
+  popupHost = document.createElement('div');
 
+  const root = popupHost.attachShadow({ mode: 'open' });
   const panel = document.createElement('div');
-  panel.className = 'gtranslate-panel';
-
-  const wrapper = document.createElement('div');
-  wrapper.className = 'gtranslate-result-wrapper';
-
-  const content = document.createElement('div');
-  content.className = 'gtranslate-result-content';
-
   const result = document.createElement('p');
-  result.className = 'gtranslate-result';
+
+  root.adoptedStyleSheets = [getPopupStyleSheet()];
+  panel.className = 'panel';
+  result.className = 'result';
   result.dir = 'auto';
   result.textContent = resultText;
 
-  content.appendChild(result);
-  wrapper.appendChild(content);
-  panel.appendChild(wrapper);
-  container.appendChild(panel);
-  document.body.appendChild(container);
+  panel.append(result);
+  root.append(panel);
+  document.body.append(popupHost);
 
-  return { panel, wrapper };
+  return panel;
 };
 
-const showPopup = async (sourceText, anchor, requestId) => {
-  const resultText = await translateText(sourceText);
-
-  if (
-    requestId !== activeRequestId ||
-    !resultText ||
-    !document.body ||
-    getSelectedText().trim() !== sourceText.trim()
-  ) return;
-
-  const { panel, wrapper } = createPopup(resultText);
-  let rect = panel.getBoundingClientRect();
-  const placement = getPopupPlacement(rect.height, anchor);
-
-  if (rect.height > placement.availableHeight) {
-    const panelChromeHeight = rect.height - wrapper.getBoundingClientRect().height;
-
-    wrapper.style.maxHeight = `${Math.max(0, placement.availableHeight - panelChromeHeight)}px`;
-    rect = panel.getBoundingClientRect();
-  }
-
-  panel.style.left = `${getPopupX(rect.width, anchor.x)}px`;
-  panel.style.top = `${placement.below ? anchor.bottom + POPUP_OFFSET : anchor.top - POPUP_OFFSET - rect.height}px`;
-  activeSourceText = sourceText.trim();
+const removePopup = () => {
+  popupHost?.remove();
+  popupHost = null;
 };
 
-const handleMouseUp = async (event) => {
-  if (event.button !== 0) return;
-
-  const target = event.target;
-  const existing = document.getElementById(CONTAINER_ID);
-
-  if (existing && target instanceof Node && existing.contains(target)) return;
-
-  const displayedText = activeSourceText;
-  const requestId = ++activeRequestId;
-
+const dismissPopup = () => {
+  ++activeRequestId;
   removePopup();
-
-  if (isPasswordInput(target) || isPasswordInput(document.activeElement)) return;
-
-  await delay(10);
-
-  const selectedText = getSelectedText();
-
-  if (selectedText.trim() === displayedText) return;
-
-  if (shouldSkipSelection(selectedText) || isBlockedSelectionTarget(target)) return;
-
-  const anchor = getSelectionAnchor(event, target);
-
-  showPopup(selectedText, anchor, requestId);
+  endSession();
 };
 
-const handleSelectionChange = () => {
-  if (isSelectionInsidePopup()) return;
-
-  if (getSelectedText().trim() === activeSourceText) return;
+const handleScroll = (event) => {
+  if (event.target === popupHost) return;
 
   dismissPopup();
 };
@@ -252,7 +222,103 @@ const handleKeyDown = (event) => {
   dismissPopup();
 };
 
+const startSession = (sourceText) => {
+  sessionSourceText = sourceText;
+
+  if (sessionActive) return;
+
+  sessionActive = true;
+
+  document.addEventListener('keydown', handleKeyDown);
+  document.addEventListener('scroll', handleScroll, SCROLL_LISTENER_OPTIONS);
+  window.addEventListener('resize', dismissPopup);
+  window.addEventListener('blur', dismissPopup);
+};
+
+const endSession = () => {
+  if (!sessionActive) return;
+
+  sessionActive = false;
+  sessionSourceText = '';
+
+  document.removeEventListener('keydown', handleKeyDown);
+  document.removeEventListener('scroll', handleScroll, SCROLL_LISTENER_OPTIONS);
+  window.removeEventListener('resize', dismissPopup);
+  window.removeEventListener('blur', dismissPopup);
+};
+
+const translateText = async (text) => {
+  try {
+    const response = await chrome.runtime.sendMessage({ text });
+
+    return response?.result || null;
+  } catch {
+    return null;
+  }
+};
+
+const showPopup = async (sourceText, anchor, requestId) => {
+  const resultText = await translateText(sourceText);
+
+  if (requestId !== activeRequestId) return;
+
+  if (!resultText || !document.body || getSelectedText() !== sourceText) {
+    dismissPopup();
+    return;
+  }
+
+  const panel = createPopup(resultText);
+  const rect = panel.getBoundingClientRect();
+  const placement = getPopupPlacement(rect.height, anchor);
+
+  if (placement.availableHeight <= 0) {
+    dismissPopup();
+    return;
+  }
+
+  const height = Math.min(rect.height, placement.availableHeight);
+
+  if (height < rect.height) panel.style.maxHeight = `${height}px`;
+
+  popupHost.style.left = `${getPopupX(rect.width, anchor.x)}px`;
+  popupHost.style.top = `${placement.below ? anchor.bottom + POPUP_OFFSET : anchor.top - POPUP_OFFSET - height}px`;
+};
+
+const handleMouseUp = async (event) => {
+  if (event.button !== 0) return;
+
+  const target = event.target;
+
+  if (popupHost && target instanceof Node && popupHost.contains(target)) return;
+
+  const previousText = sessionSourceText;
+
+  dismissPopup();
+
+  await nextTask();
+
+  const selectedText = getSelectedText();
+
+  if (selectedText === previousText) return;
+
+  if (shouldSkipSelection(selectedText) || isBlockedSelectionTarget(target)) return;
+
+  const anchor = getSelectionAnchor(event, target);
+  const requestId = ++activeRequestId;
+
+  startSession(selectedText);
+  showPopup(selectedText, anchor, requestId);
+};
+
+const handleSelectionChange = () => {
+  if (!sessionActive) return;
+
+  if (isSelectionInsidePopup()) return;
+
+  if (getSelectedText() === sessionSourceText) return;
+
+  dismissPopup();
+};
+
 document.addEventListener('mouseup', handleMouseUp);
 document.addEventListener('selectionchange', handleSelectionChange);
-document.addEventListener('keydown', handleKeyDown);
-window.addEventListener('blur', dismissPopup);
