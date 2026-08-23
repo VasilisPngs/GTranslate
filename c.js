@@ -253,6 +253,7 @@ const translateText = async (text) => {
 
     return response?.result || null;
   } catch {
+    // Usually "Extension context invalidated" after a reload.
     return null;
   }
 };

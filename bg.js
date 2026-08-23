@@ -47,9 +47,17 @@ const fetchTranslation = async (sourceText, signal) => {
 
   const response = await fetch(`${TRANSLATE_URL}?${params}`, { signal });
 
+  // The endpoint is unofficial, so a 429 or a 403 is a normal outcome rather
+  // than an exception; either way there is nothing to show.
   if (!response.ok) return null;
 
-  const data = await response.json();
+  let data;
+
+  try {
+    data = await response.json();
+  } catch {
+    return null;
+  }
 
   if (!Array.isArray(data?.[0]) || data[2] === TARGET_LANG) return null;
 
@@ -93,6 +101,14 @@ const translate = async (sourceText, signal) => {
   return translateSeparated(sourceText, signal);
 };
 
+const respond = (sendResponse, payload) => {
+  try {
+    sendResponse(payload);
+  } catch {
+    // The requesting frame navigated away before the answer arrived.
+  }
+};
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   const sourceText = typeof request?.text === 'string' ? collapseWhitespace(request.text) : '';
 
@@ -122,9 +138,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       const result = await translate(sourceText, signal);
 
       writeCache(sourceText, result);
-      sendResponse({ result });
+      respond(sendResponse, { result });
     } catch {
-      sendResponse({ result: null });
+      respond(sendResponse, { result: null });
     } finally {
       if (activeControllers.get(requestKey) === controller) {
         activeControllers.delete(requestKey);
