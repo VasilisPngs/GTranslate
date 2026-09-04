@@ -136,7 +136,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(TIMEOUT_MS)]);
       const result = await translate(sourceText, signal);
 
-      writeCache(sourceText, result);
+      if (result) writeCache(sourceText, result);
       respond(sendResponse, { result });
     } catch {
       respond(sendResponse, { result: null });
