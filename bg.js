@@ -67,11 +67,22 @@ const fetchTranslation = async (sourceText, signal) => {
 };
 
 const restoreSeparators = (segments, translatedText) => {
-  const words = translatedText.split(/\s+/);
+  const terms = segments.filter((_, index) => index % 2 === 0);
+  const translatedTerms = translatedText.split(/\s+/);
 
-  if (words.length !== Math.ceil(segments.length / 2)) return translatedText;
+  if (translatedTerms.length !== terms.length) return null;
 
-  return segments.map((segment, index) => (index % 2 === 0 ? words[index / 2] : segment)).join("");
+  let termIndex = 0;
+
+  return segments
+    .map((segment, index) => {
+      if (index % 2 !== 0) return segment;
+
+      const translatedTerm = translatedTerms[termIndex];
+      termIndex += 1;
+      return translatedTerm;
+    })
+    .join("");
 };
 
 const translateSeparated = async (sourceText, signal) => {
@@ -81,7 +92,7 @@ const translateSeparated = async (sourceText, signal) => {
 
   if (segments.length < 3) return null;
 
-  const terms = segments.filter((_, index) => index % 2 === 0);
+  const terms = segments.filter((_, index) => index % 2 === 0).map(collapseWhitespace);
 
   if (terms.some((term) => !term || !LETTER_PATTERN.test(term))) return null;
 
@@ -90,7 +101,7 @@ const translateSeparated = async (sourceText, signal) => {
 
   if (!isDistinct(translatedText, spacedText)) return null;
 
-  return restoreSeparators(segments, translatedText);
+  return restoreSeparators(segments, translatedText) ?? translatedText;
 };
 
 const translate = async (sourceText, signal) => {
