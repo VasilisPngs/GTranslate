@@ -1,5 +1,3 @@
-"use strict";
-
 const TRANSLATE_URL = "https://translate.googleapis.com/translate_a/single";
 const TARGET_LANG = "el";
 const TIMEOUT_MS = 8000;
@@ -49,21 +47,25 @@ const fetchTranslation = async (sourceText, signal) => {
 
   const response = await fetch(`${TRANSLATE_URL}?${params}`, { signal });
 
-  if (!response.ok) return null;
+  if (!response.ok) return { text: null, isTargetLang: false };
 
   let data;
 
   try {
     data = await response.json();
   } catch {
-    return null;
+    return { text: null, isTargetLang: false };
   }
 
-  if (!Array.isArray(data?.[0]) || data[2] === TARGET_LANG) return null;
+  const isTargetLang = data?.[2] === TARGET_LANG;
 
-  const resultText = data[0].map((chunk) => chunk?.[0] ?? "").join("").trim();
+  if (isTargetLang || !Array.isArray(data?.[0])) {
+    return { text: null, isTargetLang };
+  }
 
-  return resultText || null;
+  const text = data[0].map((chunk) => chunk?.[0] ?? "").join("").trim() || null;
+
+  return { text, isTargetLang: false };
 };
 
 const restoreSeparators = (segments, translatedText) => {
@@ -97,17 +99,19 @@ const translateSeparated = async (sourceText, signal) => {
   if (terms.some((term) => !term || !LETTER_PATTERN.test(term))) return null;
 
   const spacedText = terms.join(" ");
-  const translatedText = await fetchTranslation(spacedText, signal);
+  const translated = await fetchTranslation(spacedText, signal);
 
-  if (!isDistinct(translatedText, spacedText)) return null;
+  if (translated.isTargetLang || !isDistinct(translated.text, spacedText)) return null;
 
-  return restoreSeparators(segments, translatedText) ?? translatedText;
+  return restoreSeparators(segments, translated.text) ?? translated.text;
 };
 
 const translate = async (sourceText, signal) => {
-  const directText = await fetchTranslation(sourceText, signal);
+  const direct = await fetchTranslation(sourceText, signal);
 
-  if (isDistinct(directText, sourceText)) return directText;
+  if (direct.isTargetLang) return null;
+
+  if (isDistinct(direct.text, sourceText)) return direct.text;
 
   return translateSeparated(sourceText, signal);
 };
@@ -147,7 +151,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(TIMEOUT_MS)]);
       const result = await translate(sourceText, signal);
 
-      if (result) writeCache(sourceText, result);
+      writeCache(sourceText, result);
       respond(sendResponse, { result });
     } catch {
       respond(sendResponse, { result: null });

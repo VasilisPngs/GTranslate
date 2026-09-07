@@ -2,22 +2,17 @@
   "use strict";
 
   const POPUP_OFFSET = 8;
-  const POPUP_MAX_WIDTH = 300;
-  const POPUP_MAX_HEIGHT = 200;
-  const MIN_SELECTION_LENGTH = 3;
+  const POPUP_MAX_WIDTH = 540;
+  const POPUP_MAX_HEIGHT = 360;
+  const MIN_SELECTION_LENGTH = 2;
   const MAX_SELECTION_LENGTH = 1000;
   const SKIPPED_SELECTION_SELECTOR = "code, pre, kbd, samp";
   const SCROLL_LISTENER_OPTIONS = { capture: true, passive: true };
 
+  const LETTER_PATTERN = /\p{L}/u;
   const SKIPPED_TEXT_PATTERNS = [
     /^https?:\/\//i,
-    /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
-    /^[+-]?\d+(?:[.,]\d+)?$/,
-    /^[+-]?\d+(?:[.,]\d+)?\s*%$/,
-    /^(?:€|\$|£)\s*[+-]?\d+(?:[.,]\d+)?$/,
-    /^[+-]?\d+(?:[.,]\d+)?\s*(?:€|\$|£)$/,
-    /^\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}$/,
-    /^\d{1,2}:\d{2}(?::\d{2})?$/
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/
   ];
 
   const SKIPPED_COMPACT_TEXT_PATTERN = /^[A-Z0-9._:/#-]+$/;
@@ -29,22 +24,35 @@
     position: fixed;
     z-index: 2147483646;
     color-scheme: light dark;
-    font: message-box;
   }
 
   .panel {
     box-sizing: border-box;
-    max-width: min(${POPUP_MAX_WIDTH}px, calc(100vw - ${POPUP_OFFSET * 2}px));
-    max-height: min(${POPUP_MAX_HEIGHT}px, calc(100vh - ${POPUP_OFFSET * 2}px));
+    max-width: min(${POPUP_MAX_WIDTH}px, calc(100dvw - ${POPUP_OFFSET * 2}px));
+    max-height: min(${POPUP_MAX_HEIGHT}px, calc(100dvh - ${POPUP_OFFSET * 2}px));
     overflow: auto;
+    overscroll-behavior: contain;
     background: Canvas;
     color: CanvasText;
+    border: 1px solid color-mix(in srgb, CanvasText 15%, transparent);
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.16), 0 1px 4px rgba(0, 0, 0, 0.08);
+  }
+
+  .panel,
+  .result {
+    font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif !important;
+    font-weight: 400 !important;
+    font-style: normal !important;
+    letter-spacing: normal !important;
+    text-transform: none !important;
   }
 
   .result {
     margin: 0;
-    padding: 0.5em 0.75em;
-    font-size: 0.875em;
+    padding: 0.75em 1em;
+    font-size: 15px;
+    line-height: 1.5;
     overflow-wrap: anywhere;
   }
 
@@ -70,7 +78,11 @@
   };
 
   const getEditableElement = () => {
-    const element = document.activeElement;
+    let element = document.activeElement;
+
+    while (element?.shadowRoot?.activeElement) {
+      element = element.shadowRoot.activeElement;
+    }
 
     return element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement ? element : null;
   };
@@ -89,6 +101,8 @@
 
   const shouldSkipSelection = (value) => {
     if (value.length < MIN_SELECTION_LENGTH || value.length > MAX_SELECTION_LENGTH) return true;
+
+    if (!LETTER_PATTERN.test(value)) return true;
 
     if (SKIPPED_TEXT_PATTERNS.some((pattern) => pattern.test(value))) return true;
 
@@ -138,19 +152,46 @@
 
     if (!selection?.rangeCount) return getPointerAnchor(event, target);
 
-    const rect = selection.getRangeAt(0).getBoundingClientRect();
+    const range = selection.getRangeAt(0);
+    const clientRects = range.getClientRects();
 
-    if (rect.width === 0 && rect.height === 0) return getPointerAnchor(event, target);
+    if (!clientRects.length) return getPointerAnchor(event, target);
+
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let top = Infinity;
+    let bottom = -Infinity;
+    let validCount = 0;
+
+    const baseLineHeight = clientRects[0]?.height || 20;
+    const maxLineHeight = Math.max(48, baseLineHeight * 2.2);
+
+    for (const r of clientRects) {
+      if (r.width === 0 || r.height === 0) continue;
+
+      if (r.height > maxLineHeight) break;
+
+      if (validCount > 0 && r.top - bottom > 24) break;
+
+      if (r.left < minX) minX = r.left;
+      if (r.right > maxX) maxX = r.right;
+      if (r.top < top) top = r.top;
+      if (r.bottom > bottom) bottom = r.bottom;
+
+      validCount++;
+    }
+
+    if (!validCount) return getPointerAnchor(event, target);
 
     return {
-      x: rect.left + rect.width / 2,
-      top: rect.top,
-      bottom: rect.bottom
+      x: minX + (maxX - minX) / 2,
+      top,
+      bottom
     };
   };
 
   const getPopupPlacement = (height, anchor) => {
-    const viewportHeight = document.documentElement.clientHeight;
+    const viewportHeight = window.visualViewport?.height ?? document.documentElement.clientHeight;
     const spaceBelow = Math.max(0, viewportHeight - anchor.bottom - POPUP_OFFSET * 2);
     const spaceAbove = Math.max(0, anchor.top - POPUP_OFFSET * 2);
     const below = height <= spaceBelow || (height > spaceAbove && spaceBelow >= spaceAbove);
@@ -162,7 +203,7 @@
   };
 
   const getPopupX = (width, anchorX) => {
-    const viewportWidth = document.documentElement.clientWidth;
+    const viewportWidth = window.visualViewport?.width ?? document.documentElement.clientWidth;
     const maxX = Math.max(POPUP_OFFSET, viewportWidth - width - POPUP_OFFSET);
 
     return Math.min(Math.max(anchorX - width / 2, POPUP_OFFSET), maxX);
@@ -192,7 +233,7 @@
 
     panel.append(result);
     root.append(panel);
-    document.body.append(popupHost);
+    (document.fullscreenElement ?? document.documentElement).append(popupHost);
 
     return panel;
   };
@@ -260,7 +301,7 @@
 
     if (requestId !== activeRequestId) return;
 
-    if (!resultText || !document.body || getSelectedText() !== sourceText) {
+    if (!resultText || !(document.fullscreenElement ?? document.documentElement) || getSelectedText() !== sourceText) {
       dismissPopup();
       return;
     }
