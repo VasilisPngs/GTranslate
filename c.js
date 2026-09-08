@@ -10,12 +10,13 @@
   const SCROLL_LISTENER_OPTIONS = { capture: true, passive: true };
 
   const LETTER_PATTERN = /\p{L}/u;
+  const NON_GREEK_LETTER_PATTERN = /[^\P{L}\p{Script=Greek}]/u;
   const SKIPPED_TEXT_PATTERNS = [
     /^https?:\/\//i,
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/
   ];
 
-  const SKIPPED_COMPACT_TEXT_PATTERN = /^[A-Z0-9._:/#-]+$/;
+  const SKIPPED_COMPACT_TEXT_PATTERN = /^[A-Z0-9._:/#-]+$/i;
   const DIGIT_PATTERN = /\d/;
 
   const POPUP_CSS = `
@@ -24,6 +25,7 @@
     position: fixed;
     z-index: 2147483646;
     color-scheme: light dark;
+    visibility: hidden;
   }
 
   .panel {
@@ -32,6 +34,7 @@
     max-height: min(${POPUP_MAX_HEIGHT}px, calc(100dvh - ${POPUP_OFFSET * 2}px));
     overflow: auto;
     overscroll-behavior: contain;
+    scrollbar-width: thin;
     background: Canvas;
     color: CanvasText;
     border: 1px solid color-mix(in srgb, CanvasText 15%, transparent);
@@ -66,6 +69,7 @@
   let popupHost = null;
   let sessionActive = false;
   let sessionSourceText = "";
+  let sessionTarget = null;
   let activeRequestId = 0;
 
   const collapseWhitespace = (value) => value.replace(/\s+/g, " ").trim();
@@ -87,10 +91,31 @@
     return element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement ? element : null;
   };
 
-  const getSelectedText = () => {
+  const getActiveSelection = (target) => {
+    if (target instanceof Node) {
+      const root = target.getRootNode();
+      if (root instanceof ShadowRoot && typeof root.getSelection === "function") {
+        const sel = root.getSelection();
+        if (sel && sel.rangeCount > 0 && !sel.isCollapsed) return sel;
+      }
+    }
+
+    let active = document.activeElement;
+    while (active?.shadowRoot) {
+      if (typeof active.shadowRoot.getSelection === "function") {
+        const sel = active.shadowRoot.getSelection();
+        if (sel && sel.rangeCount > 0 && !sel.isCollapsed) return sel;
+      }
+      active = active.shadowRoot.activeElement;
+    }
+
+    return window.getSelection();
+  };
+
+  const getSelectedText = (target) => {
     const editable = getEditableElement();
 
-    if (!editable) return collapseWhitespace(window.getSelection()?.toString() ?? "");
+    if (!editable) return collapseWhitespace(getActiveSelection(target)?.toString() ?? "");
 
     const { type, value, selectionStart, selectionEnd } = editable;
 
@@ -102,7 +127,7 @@
   const shouldSkipSelection = (value) => {
     if (value.length < MIN_SELECTION_LENGTH || value.length > MAX_SELECTION_LENGTH) return true;
 
-    if (!LETTER_PATTERN.test(value)) return true;
+    if (!LETTER_PATTERN.test(value) || !NON_GREEK_LETTER_PATTERN.test(value)) return true;
 
     if (SKIPPED_TEXT_PATTERNS.some((pattern) => pattern.test(value))) return true;
 
@@ -114,7 +139,7 @@
   const isBlockedSelectionTarget = (target) => {
     if (getElementFromNode(target)?.closest(SKIPPED_SELECTION_SELECTOR)) return true;
 
-    const selection = window.getSelection();
+    const selection = getActiveSelection(target);
 
     if (!selection?.rangeCount) return false;
 
@@ -124,7 +149,7 @@
   const isSelectionInsidePopup = () => {
     if (!popupHost) return false;
 
-    const node = window.getSelection()?.anchorNode;
+    const node = getActiveSelection(sessionTarget)?.anchorNode;
 
     if (!node) return false;
 
@@ -148,7 +173,7 @@
   const getSelectionAnchor = (event, target) => {
     if (getEditableElement()) return getPointerAnchor(event, target);
 
-    const selection = window.getSelection();
+    const selection = getActiveSelection(target);
 
     if (!selection?.rangeCount) return getPointerAnchor(event, target);
 
@@ -171,7 +196,7 @@
 
       if (r.height > maxLineHeight) break;
 
-      if (validCount > 0 && r.top - bottom > 24) break;
+      if (validCount > 0 && r.top - bottom > maxLineHeight) break;
 
       if (r.left < minX) minX = r.left;
       if (r.right > maxX) maxX = r.right;
@@ -261,8 +286,9 @@
     dismissPopup();
   };
 
-  const startSession = (sourceText) => {
+  const startSession = (sourceText, target) => {
     sessionSourceText = sourceText;
+    sessionTarget = target ?? null;
 
     if (sessionActive) return;
 
@@ -279,6 +305,7 @@
 
     sessionActive = false;
     sessionSourceText = "";
+    sessionTarget = null;
 
     document.removeEventListener("keydown", handleKeyDown);
     document.removeEventListener("scroll", handleScroll, SCROLL_LISTENER_OPTIONS);
@@ -296,12 +323,12 @@
     }
   };
 
-  const showPopup = async (sourceText, anchor, requestId) => {
+  const showPopup = async (sourceText, anchor, target, requestId) => {
     const resultText = await translateText(sourceText);
 
     if (requestId !== activeRequestId) return;
 
-    if (!resultText || !(document.fullscreenElement ?? document.documentElement) || getSelectedText() !== sourceText) {
+    if (!resultText || !(document.fullscreenElement ?? document.documentElement) || getSelectedText(target) !== sourceText) {
       dismissPopup();
       return;
     }
@@ -321,6 +348,7 @@
 
     popupHost.style.left = `${getPopupX(rect.width, anchor.x)}px`;
     popupHost.style.top = `${placement.below ? anchor.bottom + POPUP_OFFSET : anchor.top - POPUP_OFFSET - height}px`;
+    popupHost.style.visibility = "visible";
   };
 
   const handleMouseUp = async (event) => {
@@ -336,7 +364,7 @@
 
     await scheduler.yield();
 
-    const selectedText = getSelectedText();
+    const selectedText = getSelectedText(target);
 
     if (selectedText === previousText) return;
 
@@ -345,8 +373,8 @@
     const anchor = getSelectionAnchor(event, target);
     const requestId = ++activeRequestId;
 
-    startSession(selectedText);
-    showPopup(selectedText, anchor, requestId);
+    startSession(selectedText, target);
+    showPopup(selectedText, anchor, target, requestId);
   };
 
   const handleSelectionChange = () => {
@@ -354,7 +382,7 @@
 
     if (isSelectionInsidePopup()) return;
 
-    if (getSelectedText() === sessionSourceText) return;
+    if (getSelectedText(sessionTarget) === sessionSourceText) return;
 
     dismissPopup();
   };

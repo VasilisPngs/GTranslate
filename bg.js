@@ -109,11 +109,13 @@ const translateSeparated = async (sourceText, signal) => {
 const translate = async (sourceText, signal) => {
   const direct = await fetchTranslation(sourceText, signal);
 
-  if (direct.isTargetLang) return null;
+  if (direct.isTargetLang) return { result: null, isTargetLang: true };
 
-  if (isDistinct(direct.text, sourceText)) return direct.text;
+  if (isDistinct(direct.text, sourceText)) return { result: direct.text, isTargetLang: false };
 
-  return translateSeparated(sourceText, signal);
+  const separated = await translateSeparated(sourceText, signal);
+
+  return { result: separated, isTargetLang: false };
 };
 
 const respond = (sendResponse, payload) => {
@@ -149,10 +151,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   (async () => {
     try {
       const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(TIMEOUT_MS)]);
-      const result = await translate(sourceText, signal);
+      const outcome = await translate(sourceText, signal);
 
-      writeCache(sourceText, result);
-      respond(sendResponse, { result });
+      if (outcome.result || outcome.isTargetLang) {
+        writeCache(sourceText, outcome.result);
+      }
+
+      respond(sendResponse, { result: outcome.result });
     } catch {
       respond(sendResponse, { result: null });
     } finally {
