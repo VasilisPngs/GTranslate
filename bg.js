@@ -111,6 +111,8 @@ const translate = async (sourceText, signal) => {
 
   if (direct.isTargetLang) return { result: null, isTargetLang: true };
 
+  if (!direct.text) return { result: null, isTargetLang: false };
+
   if (isDistinct(direct.text, sourceText)) return { result: direct.text, isTargetLang: false };
 
   const separated = await translateSeparated(sourceText, signal);
