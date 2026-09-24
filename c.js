@@ -7,7 +7,7 @@
   const MIN_SELECTION_LENGTH = 2;
   const MAX_SELECTION_LENGTH = 1000;
   const SKIPPED_SELECTION_SELECTOR = "code, pre, kbd, samp";
-  const SCROLL_LISTENER_OPTIONS = { capture: true, passive: true };
+  const SCROLL_LISTENER_OPTIONS = { capture: true };
 
   const LETTER_PATTERN = /\p{L}/u;
   const NON_GREEK_LETTER_PATTERN = /[^\P{L}\p{Script=Greek}]/u;
@@ -39,12 +39,12 @@
     color: CanvasText;
     border: 1px solid color-mix(in srgb, CanvasText 15%, transparent);
     border-radius: 8px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.16), 0 1px 4px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 4px 16px rgb(0 0 0 / 16%), 0 1px 4px rgb(0 0 0 / 8%);
   }
 
   .panel,
   .result {
-    font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif !important;
+    font-family: system-ui, sans-serif !important;
     font-weight: 400 !important;
     font-style: normal !important;
     letter-spacing: normal !important;
