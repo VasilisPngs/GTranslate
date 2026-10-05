@@ -69,27 +69,15 @@ const fetchTranslation = async (sourceText, signal) => {
 };
 
 const restoreSeparators = (segments, translatedText) => {
-  const terms = segments.filter((_, index) => index % 2 === 0);
   const translatedTerms = translatedText.split(/\s+/);
+  const termCount = (segments.length + 1) / 2;
 
-  if (translatedTerms.length !== terms.length) return null;
+  if (translatedTerms.length !== termCount) return null;
 
-  let termIndex = 0;
-
-  return segments
-    .map((segment, index) => {
-      if (index % 2 !== 0) return segment;
-
-      const translatedTerm = translatedTerms[termIndex];
-      termIndex += 1;
-      return translatedTerm;
-    })
-    .join("");
+  return segments.map((segment, index) => (index % 2 === 0 ? translatedTerms[index / 2] : segment)).join("");
 };
 
 const translateSeparated = async (sourceText, signal) => {
-  if (!LETTER_PATTERN.test(sourceText)) return null;
-
   const segments = sourceText.split(SEPARATOR_SPLIT_PATTERN);
 
   if (segments.length < 3) return null;

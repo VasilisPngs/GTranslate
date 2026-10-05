@@ -188,7 +188,7 @@
     let bottom = -Infinity;
     let validCount = 0;
 
-    const baseLineHeight = clientRects[0]?.height || 20;
+    const baseLineHeight = clientRects[0].height || 20;
     const maxLineHeight = Math.max(48, baseLineHeight * 2.2);
 
     for (const r of clientRects) {
@@ -282,7 +282,7 @@
 
   const startSession = (sourceText, target) => {
     sessionSourceText = sourceText;
-    sessionTarget = target ?? null;
+    sessionTarget = target;
 
     if (sessionActive) return;
 
@@ -311,7 +311,7 @@
     try {
       const response = await chrome.runtime.sendMessage({ text });
 
-      return response?.result || null;
+      return response?.result ?? null;
     } catch {
       return null;
     }
