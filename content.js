@@ -274,6 +274,12 @@
     endSession();
   };
 
+  const handleScroll = (event) => {
+    if (!event.target.contains(sessionTarget)) return;
+
+    dismissPopup();
+  };
+
   const handleKeyDown = (event) => {
     if (event.key !== "Escape") return;
 
@@ -289,7 +295,7 @@
     sessionActive = true;
 
     document.addEventListener("keydown", handleKeyDown);
-    document.addEventListener("scroll", dismissPopup, SCROLL_LISTENER_OPTIONS);
+    document.addEventListener("scroll", handleScroll, SCROLL_LISTENER_OPTIONS);
     window.addEventListener("resize", dismissPopup);
     window.addEventListener("blur", dismissPopup);
   };
@@ -302,7 +308,7 @@
     sessionTarget = null;
 
     document.removeEventListener("keydown", handleKeyDown);
-    document.removeEventListener("scroll", dismissPopup, SCROLL_LISTENER_OPTIONS);
+    document.removeEventListener("scroll", handleScroll, SCROLL_LISTENER_OPTIONS);
     window.removeEventListener("resize", dismissPopup);
     window.removeEventListener("blur", dismissPopup);
   };
