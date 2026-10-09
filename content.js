@@ -24,27 +24,40 @@
     all: initial;
     position: fixed;
     z-index: 2147483646;
-    color-scheme: light dark;
     visibility: hidden;
   }
 
   .panel {
+    --surface: light-dark(#ffffff, #1c1c1e);
+    --text: light-dark(#000000, #ffffff);
+    --glass-rim: light-dark(rgba(18, 24, 40, 0.14), rgba(0, 0, 0, 0.55));
+    --glass-edge: light-dark(rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0.18));
+    --shadow: 0 18px 40px light-dark(rgba(18, 24, 40, 0.12), rgba(0, 0, 0, 0.45));
+    --blur: saturate(180%) blur(32px);
+    --radius: 30px;
+    --pad: 16px;
+    --space-3: 12px;
+    --font-text: "Segoe UI Variable Text", system-ui, sans-serif;
+    --text-subhead: 15px;
+
+    color-scheme: light dark;
     box-sizing: border-box;
     max-width: min(${POPUP_MAX_WIDTH}px, calc(100dvw - ${POPUP_OFFSET * 2}px));
     max-height: min(${POPUP_MAX_HEIGHT}px, calc(100dvh - ${POPUP_OFFSET * 2}px));
     overflow: auto;
     overscroll-behavior: contain;
     scrollbar-width: thin;
-    background: Canvas;
-    color: CanvasText;
-    border: 1px solid color-mix(in srgb, CanvasText 15%, transparent);
-    border-radius: 8px;
-    box-shadow: 0 4px 16px rgb(0 0 0 / 16%), 0 1px 4px rgb(0 0 0 / 8%);
+    background: color-mix(in srgb, var(--surface) 90%, transparent);
+    backdrop-filter: var(--blur);
+    color: var(--text);
+    border: 1px solid var(--glass-rim);
+    border-radius: var(--radius);
+    box-shadow: inset 0 1px 0 var(--glass-edge), var(--shadow);
   }
 
   .panel,
   .result {
-    font-family: system-ui, sans-serif !important;
+    font-family: var(--font-text) !important;
     font-weight: 400 !important;
     font-style: normal !important;
     letter-spacing: normal !important;
@@ -53,9 +66,9 @@
 
   .result {
     margin: 0;
-    padding: 0.75em 1em;
-    font-size: 15px;
-    line-height: 1.5;
+    padding: var(--space-3) var(--pad);
+    font-size: var(--text-subhead);
+    line-height: 1.3;
     overflow-wrap: anywhere;
   }
 
