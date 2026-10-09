@@ -37,7 +37,7 @@
     --radius: 30px;
     --pad: 16px;
     --space-3: 12px;
-    --font-text: "Segoe UI Variable Text", system-ui, sans-serif;
+    --font-text: system-ui;
     --text-subhead: 15px;
 
     color-scheme: light dark;
