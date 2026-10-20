@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const POPUP_OFFSET = 8;
-  const POPUP_MAX_WIDTH = 540;
+  const POPUP_OFFSET = 4;
+  const POPUP_MAX_WIDTH = 320;
   const POPUP_MAX_HEIGHT = 360;
   const MIN_SELECTION_LENGTH = 2;
   const MAX_SELECTION_LENGTH = 1000;
@@ -28,17 +28,14 @@
   }
 
   .panel {
-    --surface: light-dark(#ffffff, #1c1c1e);
-    --text: light-dark(#000000, #ffffff);
-    --glass-rim: light-dark(rgba(18, 24, 40, 0.14), rgba(0, 0, 0, 0.55));
-    --glass-edge: light-dark(rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0.18));
-    --shadow: 0 18px 40px light-dark(rgba(18, 24, 40, 0.12), rgba(0, 0, 0, 0.45));
-    --blur: saturate(180%) blur(32px);
-    --radius: 30px;
-    --pad: 16px;
-    --space-3: 12px;
-    --font-text: system-ui;
-    --text-subhead: 15px;
+    --md-sys-color-surface-container: light-dark(#f3edf7, #211f26);
+    --md-sys-color-on-surface-variant: light-dark(#49454f, #cac4d0);
+    --md-sys-shape-corner-medium: 12px;
+    --md-sys-typescale-body-medium-font: system-ui;
+    --md-sys-typescale-body-medium-size: 14px;
+    --md-sys-typescale-body-medium-line-height: 20px;
+    --md-sys-typescale-body-medium-tracking: 0.25px;
+    --md-sys-typescale-body-medium-weight: 400;
 
     color-scheme: light dark;
     box-sizing: border-box;
@@ -47,28 +44,26 @@
     overflow: auto;
     overscroll-behavior: contain;
     scrollbar-width: thin;
-    background: color-mix(in srgb, var(--surface) 90%, transparent);
-    backdrop-filter: var(--blur);
-    color: var(--text);
-    border: 1px solid var(--glass-rim);
-    border-radius: var(--radius);
-    box-shadow: inset 0 1px 0 var(--glass-edge), var(--shadow);
+    background: var(--md-sys-color-surface-container);
+    color: var(--md-sys-color-on-surface-variant);
+    border-radius: var(--md-sys-shape-corner-medium);
+    box-shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 2px 6px 2px rgb(0 0 0 / 15%);
   }
 
   .panel,
   .result {
-    font-family: var(--font-text) !important;
-    font-weight: 400 !important;
+    font-family: var(--md-sys-typescale-body-medium-font) !important;
+    font-weight: var(--md-sys-typescale-body-medium-weight) !important;
     font-style: normal !important;
-    letter-spacing: normal !important;
+    letter-spacing: var(--md-sys-typescale-body-medium-tracking) !important;
     text-transform: none !important;
   }
 
   .result {
     margin: 0;
-    padding: var(--space-3) var(--pad);
-    font-size: var(--text-subhead);
-    line-height: 1.3;
+    padding: 4px 16px;
+    font-size: var(--md-sys-typescale-body-medium-size);
+    line-height: var(--md-sys-typescale-body-medium-line-height);
     overflow-wrap: anywhere;
   }
 
