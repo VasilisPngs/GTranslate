@@ -4,10 +4,12 @@
   const POPUP_OFFSET = 4;
   const POPUP_MAX_WIDTH = 320;
   const POPUP_MAX_HEIGHT = 360;
+  const POPUP_EXIT_TIMEOUT_MS = 1000;
   const MIN_SELECTION_LENGTH = 2;
   const MAX_SELECTION_LENGTH = 1000;
   const SKIPPED_SELECTION_SELECTOR = "code, pre, kbd, samp";
   const SCROLL_LISTENER_OPTIONS = { capture: true };
+  const CLOSING_ATTRIBUTE = "data-closing";
 
   const LETTER_PATTERN = /\p{L}/u;
   const NON_GREEK_LETTER_PATTERN = /[^\P{L}\p{Script=Greek}]/u;
@@ -21,10 +23,16 @@
 
   const POPUP_CSS = `
   :host {
-    all: initial;
-    position: fixed;
-    z-index: 2147483646;
-    visibility: hidden;
+    all: initial !important;
+    position: fixed !important;
+    inset: auto !important;
+    left: var(--popup-left) !important;
+    top: var(--popup-top) !important;
+    visibility: var(--popup-visibility, hidden) !important;
+  }
+
+  :host::backdrop {
+    display: none !important;
   }
 
   .panel {
@@ -36,6 +44,8 @@
     --md-sys-typescale-body-medium-line-height: 20px;
     --md-sys-typescale-body-medium-tracking: 0.25px;
     --md-sys-typescale-body-medium-weight: 400;
+    --md-sys-motion-spring-fast-spatial: 224ms linear(0, 0.0143, 0.0514, 0.1041, 0.1666, 0.2345, 0.3046, 0.3743, 0.4418, 0.5059, 0.5659, 0.6211, 0.6715, 0.7169, 0.7576, 0.7936, 0.8254, 0.8532, 0.8773, 0.8981, 0.916, 0.9313, 0.9442, 0.9551, 0.9642, 0.9718, 0.9781, 0.9832, 0.9874, 0.9908, 0.9935, 0.9956, 0.9973, 0.9986, 0.9995, 1.0003, 1.0008, 1.0011, 1.0013, 1.0015, 1.0015, 1.0015, 1.0015, 1.0014, 1.0013, 1.0012, 1.0011, 1);
+    --md-sys-motion-spring-fast-effects: 150ms linear(0, 0.017, 0.0598, 0.1187, 0.1865, 0.2582, 0.3303, 0.4003, 0.4666, 0.5284, 0.5851, 0.6366, 0.6829, 0.7243, 0.761, 0.7934, 0.8219, 0.8467, 0.8684, 0.8872, 0.9035, 0.9176, 0.9297, 0.9401, 0.9491, 0.9567, 0.9633, 0.9689, 0.9736, 0.9777, 0.9811, 0.9841, 0.9865, 0.9886, 0.9904, 0.9919, 0.9932, 0.9943, 0.9952, 0.996, 0.9966, 0.9972, 0.9976, 0.998, 0.9983, 0.9986, 0.9988, 1);
 
     color-scheme: light dark;
     box-sizing: border-box;
@@ -48,15 +58,34 @@
     color: var(--md-sys-color-on-surface-variant);
     border-radius: var(--md-sys-shape-corner-medium);
     box-shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 2px 6px 2px rgb(0 0 0 / 15%);
+    transition: scale var(--md-sys-motion-spring-fast-spatial), opacity var(--md-sys-motion-spring-fast-effects);
+  }
+
+  @starting-style {
+    .panel {
+      scale: 0.8;
+      opacity: 0;
+    }
+  }
+
+  :host([${CLOSING_ATTRIBUTE}]) .panel {
+    scale: 0.8;
+    opacity: 0;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .panel {
+      transition: none;
+    }
   }
 
   .panel,
   .result {
-    font-family: var(--md-sys-typescale-body-medium-font) !important;
-    font-weight: var(--md-sys-typescale-body-medium-weight) !important;
-    font-style: normal !important;
-    letter-spacing: var(--md-sys-typescale-body-medium-tracking) !important;
-    text-transform: none !important;
+    font-family: var(--md-sys-typescale-body-medium-font);
+    font-weight: var(--md-sys-typescale-body-medium-weight);
+    font-style: normal;
+    letter-spacing: var(--md-sys-typescale-body-medium-tracking);
+    text-transform: none;
   }
 
   .result {
@@ -178,17 +207,8 @@
     };
   };
 
-  const getSelectionAnchor = (event, target) => {
-    if (getEditableElement()) return getPointerAnchor(event, target);
-
-    const selection = getActiveSelection(target);
-
-    if (!selection?.rangeCount) return getPointerAnchor(event, target);
-
-    const range = selection.getRangeAt(0);
-    const clientRects = range.getClientRects();
-
-    if (!clientRects.length) return getPointerAnchor(event, target);
+  const getRectsAnchor = (clientRects) => {
+    if (!clientRects.length) return null;
 
     let minX = Infinity;
     let maxX = -Infinity;
@@ -214,13 +234,34 @@
       validCount++;
     }
 
-    if (!validCount) return getPointerAnchor(event, target);
+    if (!validCount) return null;
 
     return {
       x: minX + (maxX - minX) / 2,
       top,
       bottom
     };
+  };
+
+  const getEditableClientRects = (editable) => {
+    const range = editable.createValueRange(editable.selectionStart, editable.selectionEnd);
+    const clientRects = range.getClientRects();
+
+    range.disconnect();
+
+    return clientRects;
+  };
+
+  const getSelectionAnchor = (event, target) => {
+    const editable = getEditableElement();
+
+    if (editable) return getRectsAnchor(getEditableClientRects(editable)) ?? getPointerAnchor(event, target);
+
+    const selection = getActiveSelection(target);
+
+    if (!selection?.rangeCount) return getPointerAnchor(event, target);
+
+    return getRectsAnchor(selection.getRangeAt(0).getClientRects()) ?? getPointerAnchor(event, target);
   };
 
   const getPopupPlacement = (height, anchor) => {
@@ -253,6 +294,7 @@
 
   const createPopup = (resultText) => {
     popupHost = document.createElement("div");
+    popupHost.popover = "manual";
 
     const root = popupHost.attachShadow({ mode: "open" });
     const panel = document.createElement("div");
@@ -266,13 +308,31 @@
 
     panel.append(result);
     root.append(panel);
-    (document.fullscreenElement ?? document.documentElement).append(popupHost);
+    document.documentElement.append(popupHost);
+    popupHost.showPopover();
 
     return panel;
   };
 
+  const closePopup = async (host) => {
+    host.setAttribute(CLOSING_ATTRIBUTE, "");
+
+    const animations = host.shadowRoot.getAnimations();
+
+    if (animations.length) {
+      await Promise.race([
+        Promise.allSettled(animations.map((animation) => animation.finished)),
+        new Promise((resolve) => setTimeout(resolve, POPUP_EXIT_TIMEOUT_MS))
+      ]);
+    }
+
+    host.remove();
+  };
+
   const removePopup = () => {
-    popupHost?.remove();
+    if (!popupHost) return;
+
+    closePopup(popupHost);
     popupHost = null;
   };
 
@@ -323,7 +383,7 @@
 
   const translateText = async (text) => {
     try {
-      const response = await chrome.runtime.sendMessage({ text });
+      const response = await browser.runtime.sendMessage({ text });
 
       return response?.result ?? null;
     } catch {
@@ -342,7 +402,7 @@
     }
 
     const panel = createPopup(resultText);
-    const rect = panel.getBoundingClientRect();
+    const rect = popupHost.getBoundingClientRect();
     const placement = getPopupPlacement(rect.height, anchor);
 
     if (placement.availableHeight <= 0) {
@@ -354,9 +414,9 @@
 
     if (height < rect.height) panel.style.maxHeight = `${height}px`;
 
-    popupHost.style.left = `${getPopupX(rect.width, anchor.x)}px`;
-    popupHost.style.top = `${placement.below ? anchor.bottom + POPUP_OFFSET : anchor.top - POPUP_OFFSET - height}px`;
-    popupHost.style.visibility = "visible";
+    popupHost.style.setProperty("--popup-left", `${getPopupX(rect.width, anchor.x)}px`);
+    popupHost.style.setProperty("--popup-top", `${placement.below ? anchor.bottom + POPUP_OFFSET : anchor.top - POPUP_OFFSET - height}px`);
+    popupHost.style.setProperty("--popup-visibility", "visible");
   };
 
   const handleMouseUp = async (event) => {

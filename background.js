@@ -108,27 +108,14 @@ const translate = async (sourceText, signal) => {
   return { result: separated, isTargetLang: false };
 };
 
-const respond = (sendResponse, payload) => {
-  try {
-    sendResponse(payload);
-  } catch {
-  }
-};
-
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+browser.runtime.onMessage.addListener(async (request, sender) => {
   const sourceText = typeof request?.text === "string" ? collapseWhitespace(request.text) : "";
 
-  if (!sourceText) {
-    sendResponse({ result: null });
-    return false;
-  }
+  if (!sourceText) return { result: null };
 
   const cached = readCache(sourceText);
 
-  if (cached !== undefined) {
-    sendResponse({ result: cached });
-    return false;
-  }
+  if (cached !== undefined) return { result: cached };
 
   const requestKey = getRequestKey(sender);
 
@@ -138,24 +125,20 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   activeControllers.set(requestKey, controller);
 
-  (async () => {
-    try {
-      const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(TIMEOUT_MS)]);
-      const outcome = await translate(sourceText, signal);
+  try {
+    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(TIMEOUT_MS)]);
+    const outcome = await translate(sourceText, signal);
 
-      if (outcome.result || outcome.isTargetLang) {
-        writeCache(sourceText, outcome.result);
-      }
-
-      respond(sendResponse, { result: outcome.result });
-    } catch {
-      respond(sendResponse, { result: null });
-    } finally {
-      if (activeControllers.get(requestKey) === controller) {
-        activeControllers.delete(requestKey);
-      }
+    if (outcome.result || outcome.isTargetLang) {
+      writeCache(sourceText, outcome.result);
     }
-  })();
 
-  return true;
+    return { result: outcome.result };
+  } catch {
+    return { result: null };
+  } finally {
+    if (activeControllers.get(requestKey) === controller) {
+      activeControllers.delete(requestKey);
+    }
+  }
 });
