@@ -10,6 +10,23 @@
   const SKIPPED_SELECTION_SELECTOR = "code, pre, kbd, samp";
   const SCROLL_LISTENER_OPTIONS = { capture: true };
   const CLOSING_ATTRIBUTE = "data-closing";
+  const FONT_FAMILY = "GTranslate Google Sans";
+  const FONT_SIZE = "14px";
+  const FONT_WEIGHT = "400 700";
+  const FONT_FILES = [
+    {
+      file: "fonts/google-sans-greek.woff2",
+      unicodeRange: "U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF"
+    },
+    {
+      file: "fonts/google-sans-latin-ext.woff2",
+      unicodeRange: "U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF"
+    },
+    {
+      file: "fonts/google-sans-latin.woff2",
+      unicodeRange: "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+    }
+  ];
 
   const LETTER_PATTERN = /\p{L}/u;
   const NON_GREEK_LETTER_PATTERN = /[^\P{L}\p{Script=Greek}]/u;
@@ -36,16 +53,16 @@
   }
 
   .panel {
-    --md-sys-color-surface-container: light-dark(#f3edf7, #211f26);
-    --md-sys-color-on-surface-variant: light-dark(#49454f, #cac4d0);
+    --md-sys-color-surface-container: light-dark(#f0edef, #19191b);
+    --md-sys-color-on-surface-variant: light-dark(#5f5f61, #acaaad);
     --md-sys-shape-corner-medium: 12px;
-    --md-sys-typescale-body-medium-font: system-ui;
-    --md-sys-typescale-body-medium-size: 14px;
+    --md-sys-typescale-body-medium-font: "${FONT_FAMILY}", system-ui, sans-serif;
+    --md-sys-typescale-body-medium-size: ${FONT_SIZE};
     --md-sys-typescale-body-medium-line-height: 20px;
     --md-sys-typescale-body-medium-tracking: 0.25px;
     --md-sys-typescale-body-medium-weight: 400;
-    --md-sys-motion-spring-fast-spatial: 224ms linear(0, 0.0143, 0.0514, 0.1041, 0.1666, 0.2345, 0.3046, 0.3743, 0.4418, 0.5059, 0.5659, 0.6211, 0.6715, 0.7169, 0.7576, 0.7936, 0.8254, 0.8532, 0.8773, 0.8981, 0.916, 0.9313, 0.9442, 0.9551, 0.9642, 0.9718, 0.9781, 0.9832, 0.9874, 0.9908, 0.9935, 0.9956, 0.9973, 0.9986, 0.9995, 1.0003, 1.0008, 1.0011, 1.0013, 1.0015, 1.0015, 1.0015, 1.0015, 1.0014, 1.0013, 1.0012, 1.0011, 1);
-    --md-sys-motion-spring-fast-effects: 150ms linear(0, 0.017, 0.0598, 0.1187, 0.1865, 0.2582, 0.3303, 0.4003, 0.4666, 0.5284, 0.5851, 0.6366, 0.6829, 0.7243, 0.761, 0.7934, 0.8219, 0.8467, 0.8684, 0.8872, 0.9035, 0.9176, 0.9297, 0.9401, 0.9491, 0.9567, 0.9633, 0.9689, 0.9736, 0.9777, 0.9811, 0.9841, 0.9865, 0.9886, 0.9904, 0.9919, 0.9932, 0.9943, 0.9952, 0.996, 0.9966, 0.9972, 0.9976, 0.998, 0.9983, 0.9986, 0.9988, 1);
+    --md-sys-motion-spring-fast-spatial: 359ms linear(0, 0.053, 0.1817, 0.3473, 0.5207, 0.6822, 0.8197, 0.928, 1.0062, 1.057, 1.0847, 1.0945, 1.0916, 1.0806, 1.0654, 1.0489, 1.0333, 1.0197, 1.0088, 1.0008, 0.9954, 0.9924, 0.9911, 0.9912, 0.9921, 0.9935, 0.995, 0.9965, 0.9979, 1);
+    --md-sys-motion-spring-fast-effects: 149ms linear(0, 0.1788, 0.4524, 0.6683, 0.8099, 0.8949, 0.9434, 0.97, 0.9844, 0.992, 0.9959, 0.9979, 1);
 
     color-scheme: light dark;
     box-sizing: border-box;
@@ -71,6 +88,12 @@
   :host([${CLOSING_ATTRIBUTE}]) .panel {
     scale: 0.8;
     opacity: 0;
+  }
+
+  @media (prefers-contrast: more) {
+    .panel {
+      --md-sys-color-on-surface-variant: light-dark(#434345, #bab8bb);
+    }
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -103,6 +126,7 @@
   `;
 
   let popupStyleSheet = null;
+  let fontFaces = null;
   let popupHost = null;
   let sessionActive = false;
   let sessionSourceText = "";
@@ -292,6 +316,14 @@
     return popupStyleSheet;
   };
 
+  const loadFont = (text) => {
+    fontFaces ??= FONT_FILES.map(({ file, unicodeRange }) => new FontFace(FONT_FAMILY, `url("${browser.runtime.getURL(file)}")`, { weight: FONT_WEIGHT, unicodeRange }));
+
+    for (const face of fontFaces) document.fonts.add(face);
+
+    return document.fonts.load(`${FONT_SIZE} "${FONT_FAMILY}"`, text).catch(() => []);
+  };
+
   const createPopup = (resultText) => {
     popupHost = document.createElement("div");
     popupHost.popover = "manual";
@@ -400,6 +432,10 @@
       dismissPopup();
       return;
     }
+
+    await loadFont(resultText);
+
+    if (requestId !== activeRequestId) return;
 
     const panel = createPopup(resultText);
     const rect = popupHost.getBoundingClientRect();
