@@ -155,7 +155,7 @@
   const getActiveSelection = (target) => {
     if (target instanceof Node) {
       const root = target.getRootNode();
-      if (root instanceof ShadowRoot && typeof root.getSelection === "function") {
+      if (root instanceof ShadowRoot) {
         const sel = root.getSelection();
         if (sel && sel.rangeCount > 0 && !sel.isCollapsed) return sel;
       }
@@ -163,10 +163,8 @@
 
     let active = document.activeElement;
     while (active?.shadowRoot) {
-      if (typeof active.shadowRoot.getSelection === "function") {
-        const sel = active.shadowRoot.getSelection();
-        if (sel && sel.rangeCount > 0 && !sel.isCollapsed) return sel;
-      }
+      const sel = active.shadowRoot.getSelection();
+      if (sel && sel.rangeCount > 0 && !sel.isCollapsed) return sel;
       active = active.shadowRoot.activeElement;
     }
 
