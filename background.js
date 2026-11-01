@@ -91,7 +91,9 @@ const translateSeparated = async (sourceText, signal) => {
 
   if (translated.isTargetLang || !isDistinct(translated.text, spacedText)) return null;
 
-  return restoreSeparators(segments, translated.text) ?? translated.text;
+  const result = restoreSeparators(segments, translated.text) ?? translated.text;
+
+  return isDistinct(result, sourceText) ? result : null;
 };
 
 const translate = async (sourceText, signal) => {
