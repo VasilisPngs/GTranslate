@@ -4,7 +4,6 @@
   const POPUP_OFFSET = 4;
   const POPUP_MAX_WIDTH = 320;
   const POPUP_MAX_HEIGHT = 360;
-  const POPUP_EXIT_TIMEOUT_MS = 1000;
   const MIN_SELECTION_LENGTH = 2;
   const MAX_SELECTION_LENGTH = 1000;
   const SKIPPED_SELECTION_SELECTOR = "code, pre, kbd, samp";
@@ -347,14 +346,7 @@
   const closePopup = async (host) => {
     host.setAttribute(CLOSING_ATTRIBUTE, "");
 
-    const animations = host.shadowRoot.getAnimations();
-
-    if (animations.length) {
-      await Promise.race([
-        Promise.allSettled(animations.map((animation) => animation.finished)),
-        new Promise((resolve) => setTimeout(resolve, POPUP_EXIT_TIMEOUT_MS))
-      ]);
-    }
+    await Promise.allSettled(host.shadowRoot.getAnimations().map((animation) => animation.finished));
 
     host.remove();
   };
