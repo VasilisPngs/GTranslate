@@ -53,7 +53,8 @@
 
   .panel {
     --md-sys-color-surface-container: light-dark(#f0edef, #19191b);
-    --md-sys-color-on-surface-variant: light-dark(#5f5f61, #acaaad);
+    --md-sys-color-on-surface-variant: #5f5f61;
+    --md-sys-color-on-surface: #e3e3e3;
     --md-sys-shape-corner-medium: 12px;
     --md-sys-typescale-body-medium-font: "${FONT_FAMILY}", system-ui, sans-serif;
     --md-sys-typescale-body-medium-size: ${FONT_SIZE};
@@ -71,7 +72,7 @@
     overscroll-behavior: contain;
     scrollbar-width: thin;
     background: var(--md-sys-color-surface-container);
-    color: var(--md-sys-color-on-surface-variant);
+    color: light-dark(var(--md-sys-color-on-surface-variant), var(--md-sys-color-on-surface));
     border-radius: var(--md-sys-shape-corner-medium);
     box-shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 2px 6px 2px rgb(0 0 0 / 15%);
     transition: scale var(--md-sys-motion-spring-fast-spatial), opacity var(--md-sys-motion-spring-fast-effects);
@@ -91,7 +92,7 @@
 
   @media (prefers-contrast: more) {
     .panel {
-      --md-sys-color-on-surface-variant: light-dark(#434345, #bab8bb);
+      --md-sys-color-on-surface-variant: #434345;
     }
   }
 
